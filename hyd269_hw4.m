@@ -28,7 +28,6 @@ T = 0.02; % on p.78 of the book, T=300 m^2 d^-1
 Ho = 10; % define initial head 
 dx = 100;
 dt = 0.01; 
-alpha = 1; % using implicit FD
 tol=0.001; % may not need this
 % hOld is the head at time step n, hNew is nead at n+1
 %% initialize arrays
@@ -44,15 +43,28 @@ R(2,22)=-2000./dx/dx;
 %% dig in: create G and D matrices
 % assume thickness (b) = 1
 % using gwmodfundamentals handout equation 53
-for i =1:23
-    for j=1:23
-        G(i,j) = -T; % from G(i,j) = -T/b * delta x /delta y
-    end
-end
+% for i =1:23
+%     for j=1:23
+%         G(i,j) = -T; % from G(i,j) = -T/b * delta x /delta y
+%     end
+% end
+% 
+% for i = 1:23
+%     for j = 1:23
+%         D(i,j) = S.*dx.^2;
+%     end
+% end
 
-for i = 1:23
-    for j = 1:23
-        D(i,j) = S.*dx.^2;
+% modified from W&A p. 82 figure 4.6
+alpha = 1;
+for i=2:22
+    for j=2:22
+h1 = (hOld(i,j+1)+hOld(i,j-1)+hOld(i+1,j)+hOld(i-1,j))/4;
+h2 = (hNew(i,j+1)+hNew(i,j-1)+hNew(i+1,j)+hNew(i-1,j))/4;
+f1 = ((dx.^2).*S)/(4.*T.*dt);
+f2 = 1./(f1+alpha);
+G(i,j) = f2;
+D(i,j) = (f1.*hOld(i,j))+(1-alpha).*(h1-hOld(i,j))+(alpha.*h2)+(R(i,j).*dx.^2)/(4.*T);
     end
 end
 
