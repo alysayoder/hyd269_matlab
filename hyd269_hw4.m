@@ -10,7 +10,7 @@
 % cross-sectional  areas  and  distances)sources  and  sinks,  
 % and  any other boundary condition information are read in 
 % from a data file.
-data = csvread('FD_input.csv',1,0);
+data = csvread('FD_input.csv',2,0);
 %[a,b,data2] = xlsread('FD_input.csv');
 % Compute G and D matrices, then use them to formulate Ax=b and use
 % a direct solver to find the solution at each time step. 
@@ -18,15 +18,17 @@ data = csvread('FD_input.csv',1,0);
 nnode=data(1); % get values from csv file
 xnode=data(2);
 ynode=data(3);
-S = data(4); % storativity
-T = data(5); % transmissivity or K because b=1 here
+T = data(4); % transmissivity or K because b=1 here
+S = data(5); % storativity
 dt = data(6); % time interval
-dx = data(7); % distance between each node
+dx = data(7); % distance between each node, also x sec are because b=1
 wellnode=data(8);
-prate=data(10);
-Ho = data(11); % define initial head 
-tmax=data(12);
-
+prate=data(9);
+Ho = data(10); % define initial head 
+tmax=data(11); % max time value
+qp=data(12); % flux at perimter cells, these have gen. head BCs
+himag=data(13); % head at imaginary nodes for gen head BC
+Limag=data(14); % distance from node to imaginary nodes
 
 q = zeros(nnode,1); % flux, this is the boundary condition vector
 DD = zeros(nnode,nnode); % drawdown array (nnode x nnode)
@@ -48,7 +50,49 @@ end
 %% define pumping rate as specified flux BC
 q(wellnode)=prate./dx/dx;
 ti=0:dt:tmax;
+%% add general head boundary conditions
+perim = zeros((xnode.*2)+(ynode.*2)-4,1); % perim holds indexes of all perimeter nodes
+for i = 1:xnode
+    perim(i)=mesh(i,1);
+end
+for i= 1:xnode
+    perim(i+xnode)=mesh(i,ynode);
+end
+for j = 2:ynode-1
+    perim(j+(2.*xnode)-1)=mesh(1,j);
+end
+for j = 2:ynode-1
+    perim(j+(2.*xnode)+ynode-3)=mesh(xnode,j);
+end
+% take index of perimeters from above and populate q with G for these
+% locations
+Gdistal = -(T.*dx)./Limag; 
+for w = perim(1:end)
+q(w,1)=qp-((Gdistal).*himag); 
+end
 %% create G matrix
+% create logical nnode x nnode matrix
+% this will be multiplied by the G value to create a matrix of
+% G values populating connected node slots
+cons = zeros(nnode,nnode);
+for i=1:nnode
+    for j=1:nnode
+        if i == j 
+            cons(i,j) = 0;
+        elseif j == i+1 || j == i-1
+            cons(i,j)=1;
+        elseif i == j+1 || i == j-1
+            cons(i,j)=1;
+        elseif j == i+xnode || j == i-xnode
+            cons(i,j)=1;
+        elseif i == j+ynode || i == j-ynode
+            cons(i,j)=1;
+        else
+            cons(i,j)=0;
+        end
+    end
+end
+%% old , may delete
 for i=2:xnode-1
     for j=2:ynode-1
 h1 = (hOld(i,j+1)+hOld(i,j-1)+hOld(i+1,j)+hOld(i-1,j))/4;
@@ -58,16 +102,6 @@ f2 = 1./(f1+alpha);
 G(i,j) = f2;
 D(i,j) = (f1.*hOld(i,j))+(1-alpha).*(h1-hOld(i,j))+(alpha.*h2)+(q(i,j).*dx.^2)/(4.*T);
     end
-end
-
-% add boundary conditions, these are no flows on all perimeters
-for i = 2:xnode-1
-    hNew(i,1)=hNew(i,3);
-    hNew(i,ynode)=hNew(i,ynode-2);
-end
-for j = 2:ynode-1
-    hNew(1,j)=hNew(3,j);
-    hNew(xnode,j)=hNew(xnode-1,j);
 end
 %% Theis analytical solution
 % well is placed in the upper left corner (1,10)
