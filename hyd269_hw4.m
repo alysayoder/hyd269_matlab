@@ -4,17 +4,7 @@
 % -solve transient gw flow eqn with an implicit numerical scheme 
 % and a direct matrix solver
 % -compare with Theis analytical solution 
-
-% The program should be designed such that node numbers, 
-% aquifer properties,node-to-node  connections  (including 
-% cross-sectional  areas  and  distances)sources  and  sinks,  
-% and  any other boundary condition information are read in 
-% from a data file.
 data = csvread('FD_input.csv',2,0);
-%[a,b,data2] = xlsread('FD_input.csv');
-% Compute G and D matrices, then use them to formulate Ax=b and use
-% a direct solver to find the solution at each time step. 
-% in fully implicit methods, alpha=1
 nnode=data(1); % get values from csv file
 xnode=data(2);
 ynode=data(3);
@@ -30,27 +20,10 @@ qp=data(12); % flux at perimter cells, these have gen. head BCs
 himag=data(13); % head at imaginary nodes for gen head BC
 Limag=data(14); % distance from node to imaginary nodes
 
-q = zeros(nnode,1); % flux, this is the boundary condition vector
-DD = zeros(nnode,nnode); % drawdown array (nnode x nnode)
-D = ones(nnode,1); % capacitance array (vector)
-G = ones(nnode,nnode); % conductance array (sparse)
-% hOld is the head at time step n, hNew is nead at n+1
 %% create domain w/numbered nodes
 mesh = reshape(1:nnode, [xnode ynode]);
-%% initialize arrays hOld and hNew
-hOld = zeros(xnode,ynode);
-hNew = zeros(xnode,ynode);
-for i=1:xnode
-    for j=1:ynode
-        hNew(i,j)=Ho; % set hNew and hOld equal to 10 in all cells
-        hOld(i,j)=Ho;
-        q(i,j)=0; % set R matrix to 0 in all cells
-    end
-end
-%% define pumping rate as specified flux BC
-q(wellnode)=prate./dx/dx;
-ti=0:dt:tmax;
 %% add general head boundary conditions
+q = zeros(nnode,1); % flux, this is the boundary condition vector
 perim = zeros((xnode.*2)+(ynode.*2)-4,1); % perim holds indexes of all perimeter nodes
 for i = 1:xnode
     perim(i)=mesh(i,1);
@@ -70,6 +43,7 @@ Gdistal = -(T.*dx)./Limag;
 for w = perim(1:end)
 q(w,1)=qp-((Gdistal).*himag); 
 end
+q(wellnode)=prate./dx/dx; % define pumping rate as specified flux BC
 %% create G matrix
 % create logical nnode x nnode matrix
 % this will be multiplied by the G value to create a matrix of
@@ -92,17 +66,23 @@ for i=1:nnode
         end
     end
 end
-%% old , may delete
-for i=2:xnode-1
-    for j=2:ynode-1
-h1 = (hOld(i,j+1)+hOld(i,j-1)+hOld(i+1,j)+hOld(i-1,j))/4;
-h2 = (hNew(i,j+1)+hNew(i,j-1)+hNew(i+1,j)+hNew(i-1,j))/4;
-f1 = ((dx.^2).*S)/(4.*T.*dt);
-f2 = 1./(f1+alpha);
-G(i,j) = f2;
-D(i,j) = (f1.*hOld(i,j))+(1-alpha).*(h1-hOld(i,j))+(alpha.*h2)+(q(i,j).*dx.^2)/(4.*T);
-    end
-end
+% populate G matrix with G values at connected nodes and boundary nodes
+Gintra = -(T.*dx)./dx; 
+% Gintra is actually just K because the x sec area is equal to the distance
+% between nodes 
+G = zeros(nnode,nnode); % conductance array (sparse)
+G = cons*Gintra; 
+% now need to overwrite nodes affected by gen head BC with G11'=G11-G10
+Gdiag = eye([nnode nnode])*(Gintra-Gdistal);
+G = G + Gdiag; 
+%% create D matrix
+Dval = (dx.^2).*S;
+D = eye([nnode nnode])*Dval; % capacitance array (vector)
+%% initialize arrays hOld and hNew
+hO = ones(nnode,1)*10; % set initial head to 10 m at all nodes
+hOld = ones(nnode,1);
+hNew = ones(nnode,1);
+% hOld is the head at time step n, hNew is nead at n+1
 %% Theis analytical solution
 % well is placed in the upper left corner (1,10)
 % verification node is in the center of the grid (5,5)
@@ -111,7 +91,10 @@ end
 r = 200; % distance from node of interest to well
 Q = 2000; % m^3 d^-1
 uVal = zeros(1,tmax.^2);
-time = 0:dt:tmax;
+time=zeros(tmax,1);
+for i=1:tmax
+time(i) = time+dt.*1.2;
+end
 for t = 1:length(time)       % create uVal, an array containing u from 1-100, steps of .01
 u = (r.^2.*S)./(4.*T.*time(t));
 uVal(t) = u;
