@@ -80,14 +80,14 @@ end
 Gintra = ((T./4.064).*406.4)./dx; 
 % Gintra is actually just K because the x sec area is equal to the distance
 % between nodes 
-G = cons*Gintra; 
+G = cons*Gintra*-1; 
 for n = 2:nnode-1
-   G(n,n) = -(G(n+1,n)+G(n-1,n)+G(n,n+1)+G(n,n-1)); % assigns G values to each node as the sum of the connections around it
+   G(n,n) = (G(n+1,n)+G(n-1,n)+G(n,n+1)+G(n,n-1)); % assigns G values to each node as the sum of the connections around it
 end
 % now need to overwrite perimeter nodes affected by gen head BC with G11'=G11-G10
 Gdiag = zeros(nnode,nnode);
 for i = 1:length(perim)
-Gdiag(perim(i),perim(i)) = Gintra-Gdistal; %
+Gdiag(perim(i),perim(i)) = Gintra-Gdistal; 
 end
 Gdiag = Gdiag*eye([nnode nnode]);
 G = G + Gdiag; 
@@ -107,17 +107,17 @@ H(:,i) = x;
 end
 %% Compute Numerical Drawdown
 numDD = ones(nnode,length(time))*Ho; % this is the mesh populated with initial head everywhere
-numDD = (numDD-H); % subtracting head after pumping from initial head
+numDD = (numDD-H).*-1; % subtracting head after pumping from initial head
 %% Run at Steady State
 %% Compute Mass Balance
-%% Theis analytical solution Jacob
-%r = 300; % distance from node of interest to well
-Q = prate; % m^3 d^-1
-ddVal = zeros(length(time),1);
-for b = 1:length(time)
-dd = (prate./(4.*pi.*T)).*log((2.25.*T.*time(b))./((r.^2).*S)); 
-ddVal(b) = dd;
-end
+% %% Theis analytical solution Jacob
+% %r = 300; % distance from node of interest to well
+% Q = prate; % m^3 d^-1
+% ddVal = zeros(length(time),1);
+% for b = 1:length(time)
+% dd = (prate./(4.*pi.*T)).*log((2.25.*T.*time(b))./((r.^2).*S)); 
+% ddVal(b) = dd;
+% end
 %% Theis test w/Integral
 % well is placed in the upper left corner (1,10)
 % verification node is in the center of the grid (5,5)
@@ -143,28 +143,28 @@ for b = 1:numel(WuVal)
 dd = (Q./(4.*pi.*T)).*WuVal(b);
 ddValI(b) = dd;
 end
-%% Theis Factorial
-%r = 300; % distance from node of interest to well
-Q = prate; % m^3 d^-1
-uVal = zeros(1,tmax);
-for t = 1:length(time)       % create uVal, an array containing u from 1-100, steps of .01
-uVal(t) = (r.^2.*S)./(4.*T.*(time(t)));
-end
-%Populating an array with well function values for each time step. 
-WuVal = zeros(1,tmax);
-for v = 1:numel(uVal)      
-WuVal(v) = -0.5772-log(uVal(v))+uVal(v)-((uVal(v).^2)./(2.*factorial(2)))+((uVal(v).^3)./(3.*factorial(3)))-((uVal(v).^4)./(4.*factorial(4)));
-%these should make sense w/appendix 1 vals in Fetter
-end
-%Calculating drawdown at each time step.
-ddValF = zeros(1,tmax);
-for b = 1:numel(WuVal)
-ddValF(b) =(Q./(4.*pi.*T)).*WuVal(b);
-end
-%% Theis comparison
-loglog(time(4:end),ddVal(4:end),time(4:end),ddValI(4:end),time(4:end),ddValF(4:end));
-set(gca,'XScale','log','YDir','reverse');
-legend('Jacob','Integral','Factorial');
+% %% Theis Factorial
+% %r = 300; % distance from node of interest to well
+% Q = prate; % m^3 d^-1
+% uVal = zeros(1,tmax);
+% for t = 1:length(time)       % create uVal, an array containing u from 1-100, steps of .01
+% uVal(t) = (r.^2.*S)./(4.*T.*(time(t)));
+% end
+% %Populating an array with well function values for each time step. 
+% WuVal = zeros(1,tmax);
+% for v = 1:numel(uVal)      
+% WuVal(v) = -0.5772-log(uVal(v))+uVal(v)-((uVal(v).^2)./(2.*factorial(2)))+((uVal(v).^3)./(3.*factorial(3)))-((uVal(v).^4)./(4.*factorial(4)));
+% %these should make sense w/appendix 1 vals in Fetter
+% end
+% %Calculating drawdown at each time step.
+% ddValF = zeros(1,tmax);
+% for b = 1:numel(WuVal)
+% ddValF(b) =(Q./(4.*pi.*T)).*WuVal(b);
+% end
+% %% Theis comparison
+% loglog(time(4:end),ddVal(4:end),time(4:end),ddValI(4:end),time(4:end),ddValF(4:end));
+% set(gca,'XScale','log','YDir','reverse');
+% legend('Jacob','Integral','Factorial');
 %% verification plot: drawdown vs. time at a node at least two nodes away
 % from the well node. Include Theis and numerical model results. 
 plot(time(4:end),ddValI(4:end),time(4:end),numDD(230,4:end));
