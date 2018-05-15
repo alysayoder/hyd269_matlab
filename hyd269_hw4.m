@@ -19,6 +19,7 @@ tmax=data(11); % max time value
 qp=data(12); % flux at perimiter cells, these have gen. head BCs
 himag=data(13); % head at imaginary nodes for gen head BC
 Limag=data(14); % distance from node to imaginary nodes
+r=data(15); % radial distance from pumping well to observation well
 %% create domain w/numbered nodes
 mesh = reshape(1:nnode, [xnode ynode]);
 %% create time vector used for Theis and Direct Solver
@@ -48,7 +49,7 @@ for j = 2:ynode-1
 end
 % take index of perimeters from above and populate q with G for these
 % locations
-Gdistal = -(T.*dx)./Limag; 
+Gdistal = ((T./4.064).*406.4)./Limag; 
 for w = perim(1:end)
 q(w,1)=qp-((Gdistal).*himag); 
 end
@@ -76,24 +77,22 @@ for i=1:nnode
     end
 end
 % populate G matrix with G values at connected nodes and boundary nodes
-Gintra = -(.02.*dx)./dx; 
+Gintra = ((T./4.064).*406.4)./dx; 
 % Gintra is actually just K because the x sec area is equal to the distance
 % between nodes 
 G = cons*Gintra; 
-% now need to overwrite perimeter nodes affected by gen head BC with G11'=G11-G10
-Gdiag = eye([nnode nnode])*(Gintra-Gdistal);
-for c = 1:length(perim)
-  for i = 1:length(perim)
-    if c==i && c==perim(c)
-    Gdiag(c,i) = Gdiag(c,i); 
-    else
-    Gdiag(c,i)=0;
-    end
-  end
+for n = 2:nnode-1
+   G(n,n) = -(G(n+1,n)+G(n-1,n)+G(n,n+1)+G(n,n-1)); % assigns G values to each node as the sum of the connections around it
 end
+% now need to overwrite perimeter nodes affected by gen head BC with G11'=G11-G10
+Gdiag = zeros(nnode,nnode);
+for i = 1:length(perim)
+Gdiag(perim(i),perim(i)) = Gintra-Gdistal; %
+end
+Gdiag = Gdiag*eye([nnode nnode]);
 G = G + Gdiag; 
 %% create D matrix
-Dval = (dx.^2).*S;
+Dval = ((dx.^2).*4.064).*(.00049);
 D = eye([nnode nnode])*Dval; % capacitance array (vector)
 %% initialize array for storing H values for each node at each time step
 hInit = ones(nnode,1)*Ho; 
@@ -107,10 +106,12 @@ x = mldivide(A,B);
 H(:,i) = x;
 end
 %% Compute Numerical Drawdown
-numDD = ones(nnode,length(time))*Ho;
-numDD = numDD-H; % subtracting head after pumping from initial head
+numDD = ones(nnode,length(time))*Ho; % this is the mesh populated with initial head everywhere
+numDD = (numDD-H); % subtracting head after pumping from initial head
+%% Run at Steady State
+%% Compute Mass Balance
 %% Theis analytical solution Jacob
-r = 300; % distance from node of interest to well
+%r = 300; % distance from node of interest to well
 Q = prate; % m^3 d^-1
 ddVal = zeros(length(time),1);
 for b = 1:length(time)
@@ -122,7 +123,7 @@ end
 % verification node is in the center of the grid (5,5)
 % triangle sides are 4 and 5, used pythag to get r
 %r = 6.403124237432849;
-r = 300; % distance from node of interest to well
+%r = 300; % distance from node of interest to well
 Q = prate; % m^3 d^-1
 uVal = zeros(1,tmax);
 for t = 1:length(time)       % create uVal, an array containing u from 1-100, steps of .01
@@ -143,7 +144,7 @@ dd = (Q./(4.*pi.*T)).*WuVal(b);
 ddValI(b) = dd;
 end
 %% Theis Factorial
-r = 300; % distance from node of interest to well
+%r = 300; % distance from node of interest to well
 Q = prate; % m^3 d^-1
 uVal = zeros(1,tmax);
 for t = 1:length(time)       % create uVal, an array containing u from 1-100, steps of .01
@@ -161,22 +162,63 @@ for b = 1:numel(WuVal)
 ddValF(b) =(Q./(4.*pi.*T)).*WuVal(b);
 end
 %% Theis comparison
-plot(time(4:end),ddVal(4:end),time(4:end),ddValI(4:end),time(4:end),ddValF(4:end));
+loglog(time(4:end),ddVal(4:end),time(4:end),ddValI(4:end),time(4:end),ddValF(4:end));
 set(gca,'XScale','log','YDir','reverse');
 legend('Jacob','Integral','Factorial');
 %% verification plot: drawdown vs. time at a node at least two nodes away
 % from the well node. Include Theis and numerical model results. 
-plot(time(4:end),ddValI(4:end),time(4:end),numDD(193,4:end));
-set(gca,'XScale','log','YDir','reverse');
+plot(time(4:end),ddValI(4:end),time(4:end),numDD(230,4:end));
+set(gca,'XScale','log','YDir','reverse');%
 ylabel('Drawdown (m)');
 title('Verification Plot');
 xlabel('Time (d)');
 legend('Theis','Numerical')
 %% surface plot for troubleshooting
+figure 
 test = mesh;
+for n = 1:400
+   test(n) = H(n,500);
+end
+subplot(3,2,1);
+surf(test);
+axis([0 20 0 20 -5000 1000]);
+
+subplot(3,2,2);
+test=mesh;
+for n = 1:400
+   test(n) = H(n,1000);
+end
+surf(test);
+axis([0 20 0 20 -5000 1000]);
+
+subplot(3,2,3);
+test=mesh;
+for n = 1:400
+   test(n) = H(n,3000);
+end
+surf(test);
+axis([0 20 0 20 -5000 1000]);
+
+subplot(3,2,4);
+test=mesh;
+for n = 1:400
+   test(n) = H(n,6000);
+end
+surf(test);
+axis([0 20 0 20 -5000 1000]);
+
+subplot(3,2,5);
+test=mesh;
+for n = 1:400
+   test(n) = H(n,8000);
+end
+surf(test);
+axis([0 20 0 20 -5000 1000]);
+
+subplot(3,2,6);
+test=mesh;
 for n = 1:400
    test(n) = H(n,10000);
 end
-
 surf(test);
-axis([0 20 0 20 -30 20]);
+axis([0 20 0 20 -5000 1000]);
